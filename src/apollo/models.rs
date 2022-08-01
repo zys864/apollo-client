@@ -1,32 +1,30 @@
 use std::collections::HashMap;
 
-use serde::{Deserialize};
+use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Config {
-    id: i64,
-    release_key: String,
-    name: String,
-    app_id: String,
-    cluster_name: String,
-    namespace_name: String,
+    pub id: i64,
+    pub release_key: String,
+    pub name: String,
+    pub app_id: String,
+    pub cluster_name: String,
+    pub namespace_name: String,
     #[serde(deserialize_with = "configurations_serde::deserialize")]
-    configurations: HashMap<String,String>,
-    comment: String,
-    is_abandoned: bool,
-    data_change_created_by: String,
-    data_change_last_modified_by: String,
-    data_change_created_time: String,
-    data_change_last_modified_time: String,
+    pub configurations: HashMap<String, String>,
+    pub comment: String,
+    pub is_abandoned: bool,
+    pub data_change_created_by: String,
+    pub data_change_last_modified_by: String,
+    pub data_change_created_time: String,
+    pub data_change_last_modified_time: String,
 }
-mod configurations_serde{
+mod configurations_serde {
     use std::collections::HashMap;
 
     use serde::{self, Deserialize, Deserializer};
-    pub fn deserialize<'de, D>(
-        deserializer: D,
-    ) -> Result<HashMap<String,String>, D::Error>
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<HashMap<String, String>, D::Error>
     where
         D: Deserializer<'de>,
     {

@@ -1,7 +1,10 @@
+use std::{collections::HashMap, path::PathBuf};
+
+use anyhow::Context;
 use derive_builder::Builder;
 use once_cell::sync::Lazy;
 use reqwest::{Client, ClientBuilder};
-use serde_json::Value;
+use tokio::io::AsyncWriteExt;
 
 use super::models::Config;
 
@@ -17,6 +20,8 @@ pub struct ApolloClient {
     pub cluster_name: String,
     /// 应用部署的机器ip
     pub ip: Option<String>,
+    cache_path: String,
+    release_key: Option<String>,
 }
 
 impl ApolloClient {
@@ -26,6 +31,8 @@ impl ApolloClient {
             app_id,
             cluster_name: "default".to_string(),
             ip: None,
+            cache_path: "config/".to_string(),
+            release_key: None,
         }
     }
     pub fn builder() -> ApolloClientBuilder {
@@ -40,7 +47,7 @@ impl ApolloClient {
             == 200;
         Ok(resp)
     }
-    pub async fn get_config_by_namespace<T,R>(
+    pub async fn get_config_by_namespace<T, R>(
         &self,
         namespace: T,
         params: R,
@@ -56,13 +63,31 @@ impl ApolloClient {
             self.cluster_name,
             namespace.into().unwrap_or("application".to_string())
         );
-        let request_builder = if let Some(client_ip) = params.into(){
-            HTTP_CLIENT.get(url).query(&[("ip",client_ip)])
-        }else{
+        let request_builder = if let Some(client_ip) = params.into() {
+            HTTP_CLIENT.get(url).query(&[("ip", client_ip)])
+        } else {
             HTTP_CLIENT.get(url)
         };
         let config = request_builder.send().await?.json().await?;
         Ok(config)
+    }
+    pub async fn update_cache(
+        &mut self,
+        release_key: &str,
+        configurations: &HashMap<String, String>,
+        namespace: &str,
+    ) -> crate::AnyResult<()> {
+        let file_name = format!("{}_configuration_{}.txt", self.app_id, namespace);
+        let path: PathBuf = [self.cache_path.clone(),file_name].iter().collect();
+        let mut file = tokio::fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .open(&path)
+            .await.with_context(||format!("can't open or create file:{}",path.to_string_lossy()))?;
+        file.write_all(serde_json::to_string(configurations)?.as_bytes())
+            .await?;
+        self.release_key = Some(release_key.to_string());
+        Ok(())
     }
 }
 
@@ -78,8 +103,9 @@ mod tests {
     }
     #[tokio::test]
     async fn test_get_config_by_namespace() {
-        let apollo = ApolloClient::new("app".to_string());
+        let mut apollo = ApolloClient::new("app".to_string());
         let r = apollo.get_config_by_namespace(None, None).await.unwrap();
-        println!("{:#?}",r);
+        apollo.update_cache(&r.release_key,&r.configurations,"application").await.unwrap();
+        println!("{:#?}", r);
     }
 }
